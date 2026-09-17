@@ -1,0 +1,88 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Shallot — a Tor SOCKS proxy in the macOS menu bar</title>
+<meta name="description" content="macOS menu-bar app that runs a Tor SOCKS5 proxy on 127.0.0.1:9050, built on Arti.">
+<style>
+  :root {
+    --bg: #faf8f5; --fg: #1d1a1f; --muted: #6b6470; --line: #e2dcd6;
+    --accent: #7a2e5d; --code-bg: #f0ebe6;
+  }
+  @media (prefers-color-scheme: dark) {
+    :root {
+      --bg: #17141a; --fg: #ece7ee; --muted: #9d94a3; --line: #302a35;
+      --accent: #d88bb8; --code-bg: #221d26;
+    }
+  }
+  * { box-sizing: border-box; }
+  body {
+    margin: 0; background: var(--bg); color: var(--fg);
+    font: 16px/1.55 -apple-system, BlinkMacSystemFont, "Helvetica Neue", sans-serif;
+  }
+  main { max-width: 60rem; margin: 0 auto; padding: 3rem 1.25rem 2rem; }
+  h1 { font-size: 2.25rem; letter-spacing: -0.02em; margin: 0 0 .5rem; }
+  .lede { font-size: 1.15rem; max-width: 42rem; margin: 0 0 1.5rem; }
+  .actions { display: flex; flex-wrap: wrap; gap: 1rem; align-items: center; margin-bottom: 2.25rem; }
+  .button {
+    background: var(--accent); color: var(--bg); text-decoration: none;
+    padding: .6rem 1.1rem; border-radius: .5rem; font-weight: 600;
+  }
+  .actions small { color: var(--muted); }
+  .grid { display: grid; grid-template-columns: repeat(auto-fit, minmax(18rem, 1fr)); gap: 0 2.5rem; }
+  section { border-top: 1px solid var(--line); padding: 1rem 0 .5rem; }
+  h2 { font-size: .8rem; text-transform: uppercase; letter-spacing: .08em; color: var(--muted); margin: 0 0 .5rem; }
+  p { margin: 0 0 .75rem; }
+  a { color: var(--accent); }
+  code, pre { font: .85rem/1.5 ui-monospace, SFMono-Regular, Menlo, monospace; background: var(--code-bg); border-radius: .3rem; }
+  code { padding: .1rem .3rem; }
+  pre { padding: .7rem .85rem; margin: 0 0 .75rem; overflow-x: auto; }
+  pre code { padding: 0; background: none; }
+  footer { border-top: 1px solid var(--line); margin-top: .5rem; padding-top: 1rem; color: var(--muted); font-size: .9rem; }
+</style>
+</head>
+<body>
+<main>
+  <h1>Shallot</h1>
+  <p class="lede">A macOS menu-bar app that runs a Tor SOCKS5 proxy on <code>127.0.0.1:9050</code>.
+  Click to turn it on or off; the icon shows whether it is off, bootstrapping, connected or failed.</p>
+  <div class="actions">
+    <a class="button" href="https://github.com/den200/shallot/releases/latest/download/Shallot.dmg">Download Shallot.dmg</a>
+    <small>Apple silicon · macOS 13 or later · <a href="https://github.com/den200/shallot">source on GitHub</a></small>
+  </div>
+
+  <div class="grid">
+    <section>
+      <h2>Why Arti, not a tor daemon</h2>
+      <p><a href="https://arti.torproject.org">Arti</a> is the Tor Project's Rust implementation, and
+      it is a library. Shallot is one app with Tor compiled in: no Homebrew, no launchd service,
+      no <code>torrc</code>, nothing left running when you quit.</p>
+      <p>The cost: Arti is younger than C tor and has had less scrutiny, and Shallot has no bridges
+      or pluggable transports. If you need those, run <code>tor</code>.</p>
+    </section>
+
+    <section>
+      <h2>Install, and the Gatekeeper step</h2>
+      <p>Open the DMG and drag Shallot to Applications. It is ad-hoc signed and not notarized, so
+      macOS blocks the first launch. Clear that with:</p>
+      <pre><code>xattr -dr com.apple.quarantine /Applications/Shallot.app</code></pre>
+      <p>Or open it, click <b>Done</b>, then <b>System Settings → Privacy &amp; Security → Open
+      Anyway</b>. Control-click → Open no longer works on macOS 15 and later. Or
+      <a href="https://github.com/den200/shallot#build">build it yourself</a>.</p>
+    </section>
+
+    <section>
+      <h2>Point an app at it</h2>
+      <p>SOCKS5 proxy, host <code>127.0.0.1</code>, port <code>9050</code>. In Sparrow Wallet:
+      Settings → Server → Use Proxy. <code>.onion</code> addresses work. To check it:</p>
+      <pre><code>curl --socks5-hostname 127.0.0.1:9050 \
+  https://check.torproject.org/api/ip</code></pre>
+      <p>The listener binds to loopback only; there is no setting to change that.</p>
+    </section>
+  </div>
+
+  <footer>MIT or Apache-2.0. Not affiliated with the Tor Project.</footer>
+</main>
+</body>
+</html>

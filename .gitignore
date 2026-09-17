@@ -1,0 +1,4 @@
+build/
+dist/
+tor/target/
+.DS_Store
