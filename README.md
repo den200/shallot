@@ -57,6 +57,10 @@ Use a SOCKS5 proxy with host `127.0.0.1` and port `9050`. The menu has an item t
 
 Use `--socks5-hostname` (or `socks5h://`) so that DNS lookups go through Tor as well.
 
+"Connected" is measured, not assumed: every 20 seconds Shallot resolves `www.torproject.org`
+through a Tor circuit, and two failures in a row turn the icon to failed until a check succeeds
+again. That lookup is the only traffic Shallot generates on its own.
+
 The port can be changed from the menu. The listener binds to `127.0.0.1` only and there is no
 setting to change that. Tor state is kept in `~/Library/Application Support/Shallot` and
 `~/Library/Caches/Shallot`.

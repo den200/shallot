@@ -101,6 +101,7 @@ final class AppDelegate: NSObject, NSApplicationDelegate, NSMenuDelegate {
         switch parts.first {
         case "bootstrap": state = .bootstrapping(parts.count > 1 ? Int(parts[1]) ?? 0 : 0)
         case "ready": state = .connected
+        case "unreachable": state = .failed("cannot reach the Tor network")
         case "error": lastError = parts.count > 1 ? String(parts[1]) : nil
         default: break
         }

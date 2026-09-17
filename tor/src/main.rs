@@ -3,7 +3,10 @@
 //! Usage: `shallot-tor [port]` (default 9050).
 //!
 //! Status is reported on stdout, one line per event, for the menu-bar app:
-//! `bootstrap <0-100>`, `ready`, and `error <message>` just before exiting 1.
+//! `bootstrap <0-100>`, `ready`, `unreachable`, and `error <message>` just before
+//! exiting 1. `ready` and `unreachable` come from an end-to-end probe, because
+//! Arti's own status only records that a connection worked at some point since
+//! startup and never notices the network going away.
 //! The process exits on SIGTERM or when stdin reaches EOF, so it cannot
 //! outlive the app that started it.
 
@@ -11,12 +14,14 @@ use std::error::Error;
 use std::net::{Ipv4Addr, SocketAddr};
 use std::path::PathBuf;
 use std::sync::Arc;
+use std::time::Duration;
 
 use arti_client::config::TorClientConfigBuilder;
 use arti_client::TorClient;
 use futures::{AsyncRead, AsyncReadExt, AsyncWrite, AsyncWriteExt, StreamExt};
 use tor_rtcompat::{
-    NetStreamListener, NetStreamProvider, PreferredRuntime, SpawnExt, ToplevelBlockOn,
+    NetStreamListener, NetStreamProvider, PreferredRuntime, SleepProvider, SleepProviderExt,
+    SpawnExt, ToplevelBlockOn,
 };
 use tor_socksproto::{Buffer, Handshake, NextStep, SocksCmd, SocksProxyHandshake, SocksStatus};
 
@@ -53,16 +58,14 @@ async fn run(rt: PreferredRuntime, port: u16) -> Result<()> {
         .create_unbootstrapped()?;
 
     let mut events = client.bootstrap_events();
-    rt.spawn(async move {
+    let progress = rt.spawn_with_handle(async move {
         while let Some(status) = events.next().await {
-            if status.ready_for_traffic() {
-                println!("ready");
-            } else {
-                println!("bootstrap {}", (status.as_frac() * 100.0) as u8);
-            }
+            println!("bootstrap {}", (status.as_frac() * 100.0) as u8);
         }
     })?;
     client.bootstrap().await?;
+    drop(progress);
+    rt.spawn(probe(rt.clone(), client.clone()))?;
 
     let mut incoming = listener.incoming();
     while let Some(conn) = incoming.next().await {
@@ -73,6 +76,23 @@ async fn run(rt: PreferredRuntime, port: u16) -> Result<()> {
         })?;
     }
     Ok(())
+}
+
+/// Resolve a name through Tor every 20 seconds and report whether it worked
+/// within 15. One failure can be a bad exit, so `unreachable` takes two in a row.
+async fn probe(rt: PreferredRuntime, client: Arc<TorClient<PreferredRuntime>>) {
+    let mut failures = 0;
+    let mut reported = None;
+    loop {
+        let resolve = client.resolve("www.torproject.org");
+        let up = matches!(rt.timeout(Duration::from_secs(15), resolve).await, Ok(Ok(_)));
+        failures = if up { 0 } else { failures + 1 };
+        if (up || failures == 2) && reported != Some(up) {
+            println!("{}", if up { "ready" } else { "unreachable" });
+            reported = Some(up);
+        }
+        rt.sleep(Duration::from_secs(if up { 20 } else { 5 })).await;
+    }
 }
 
 async fn serve<S>(client: Arc<TorClient<PreferredRuntime>>, mut socks: S) -> Result<()>
