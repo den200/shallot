@@ -39,6 +39,13 @@ Open no longer works on macOS 15 and later.
 If you would rather not trust a binary from a stranger, build it yourself (below); a local
 build is never quarantined.
 
+## Updates
+
+**Check for Updates…** in the menu asks GitHub for the latest release and, if it is newer,
+downloads the DMG, replaces the app and relaunches it. Nothing is checked in the background.
+An update is trusted exactly as much as your first download was: it comes from this
+repository's releases over HTTPS and carries no other signature.
+
 ## Point an app at it
 
 Use a SOCKS5 proxy with host `127.0.0.1` and port `9050`. The menu has an item that copies

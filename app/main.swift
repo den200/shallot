@@ -17,6 +17,8 @@ final class AppDelegate: NSObject, NSApplicationDelegate, NSMenuDelegate {
     private let portItem = NSMenuItem(title: "", action: #selector(changePort), keyEquivalent: "")
     private let copyItem = NSMenuItem(title: "", action: #selector(copyAddress), keyEquivalent: "")
     private let loginItem = NSMenuItem(title: "Launch at Login", action: #selector(toggleLogin), keyEquivalent: "")
+    private let aboutItem = NSMenuItem(title: "About Shallot", action: #selector(showAbout), keyEquivalent: "")
+    private let updateItem = NSMenuItem(title: "Check for Updates…", action: #selector(checkForUpdates), keyEquivalent: "")
     private let quitItem = NSMenuItem(title: "Quit Shallot", action: #selector(NSApplication.terminate), keyEquivalent: "q")
 
     private var child: Process?
@@ -34,8 +36,9 @@ final class AppDelegate: NSObject, NSApplicationDelegate, NSMenuDelegate {
         let menu = NSMenu()
         menu.delegate = self
         menu.items = [statusLine, toggleItem, .separator(), portItem, copyItem,
-                      .separator(), loginItem, .separator(), quitItem]
-        for item in [toggleItem, portItem, copyItem, loginItem] { item.target = self }
+                      .separator(), loginItem, .separator(), aboutItem, updateItem,
+                      .separator(), quitItem]
+        for item in [toggleItem, portItem, copyItem, loginItem, aboutItem, updateItem] { item.target = self }
         statusItem.menu = menu
 
         render()
@@ -183,6 +186,95 @@ final class AppDelegate: NSObject, NSApplicationDelegate, NSMenuDelegate {
         } catch {
             NSAlert(error: error).runModal()
         }
+    }
+
+    @objc private func showAbout() {
+        let credits = NSMutableAttributedString(
+            string: "A Tor SOCKS5 proxy on 127.0.0.1, built on Arti, the Tor Project's Rust "
+                + "implementation of Tor. Point an app at the port shown in the menu and its "
+                + "traffic goes through Tor.\n\n",
+            attributes: [.foregroundColor: NSColor.labelColor])
+        credits.append(NSAttributedString(string: "github.com/den200/shallot",
+                                          attributes: [.link: "https://github.com/den200/shallot"]))
+        NSApp.activate(ignoringOtherApps: true)
+        NSApp.orderFrontStandardAboutPanel(options: [.credits: credits])
+    }
+
+    @objc private func checkForUpdates() {
+        Task { @MainActor in
+            do {
+                let release = try await Updater.latest()
+                let current = Bundle.main.infoDictionary!["CFBundleShortVersionString"] as! String
+                let latest = release.tagName.trimmingCharacters(in: ["v"])
+
+                NSApp.activate(ignoringOtherApps: true)
+                let alert = NSAlert()
+                guard latest.compare(current, options: .numeric) == .orderedDescending else {
+                    alert.messageText = "Shallot \(current) is up to date."
+                    alert.runModal()
+                    return
+                }
+                alert.messageText = "Shallot \(latest) is available"
+                alert.informativeText = "You have \(current). Installing replaces the app and relaunches it, which restarts the proxy."
+                alert.addButton(withTitle: "Install and Relaunch")
+                alert.addButton(withTitle: "Cancel")
+                guard alert.runModal() == .alertFirstButtonReturn else { return }
+
+                try await Updater.install(release)
+                NSApp.terminate(nil)
+            } catch {
+                NSAlert(error: error).runModal()
+            }
+        }
+    }
+}
+
+/// Updates come from the GitHub release, over HTTPS: the same trust as the first download.
+enum Updater {
+    struct Release: Decodable {
+        struct Asset: Decodable {
+            let name: String
+            let browserDownloadUrl: URL
+        }
+        let tagName: String
+        let assets: [Asset]
+    }
+
+    static func latest() async throws -> Release {
+        let url = URL(string: "https://api.github.com/repos/den200/shallot/releases/latest")!
+        let (data, _) = try await URLSession.shared.data(from: url)
+        let decoder = JSONDecoder()
+        decoder.keyDecodingStrategy = .convertFromSnakeCase
+        return try decoder.decode(Release.self, from: data)
+    }
+
+    /// Replaces the running bundle with the one in the release's DMG and schedules a relaunch.
+    static func install(_ release: Release) async throws {
+        guard let asset = release.assets.first(where: { $0.name == "Shallot.dmg" }) else {
+            throw URLError(.fileDoesNotExist)
+        }
+        let (dmg, _) = try await URLSession.shared.download(from: asset.browserDownloadUrl)
+
+        let files = FileManager.default
+        let bundle = Bundle.main.bundleURL
+        let mount = files.temporaryDirectory.appendingPathComponent(UUID().uuidString)
+        try run("/usr/bin/hdiutil", "attach", "-nobrowse", "-readonly", "-mountpoint", mount.path, dmg.path)
+        defer { try? run("/usr/bin/hdiutil", "detach", mount.path) }
+
+        let staging = try files.url(for: .itemReplacementDirectory, in: .userDomainMask,
+                                    appropriateFor: bundle, create: true)
+        let staged = staging.appendingPathComponent("Shallot.app")
+        try files.copyItem(at: mount.appendingPathComponent("Shallot.app"), to: staged)
+        _ = try files.replaceItemAt(bundle, withItemAt: staged)
+
+        // Reopen after this instance, and the proxy holding the port, have exited.
+        try run("/bin/sh", "-c", "(sleep 1; open \"$0\") &", bundle.path)
+    }
+
+    private static func run(_ tool: String, _ arguments: String...) throws {
+        let process = try Process.run(URL(fileURLWithPath: tool), arguments: arguments)
+        process.waitUntilExit()
+        if process.terminationStatus != 0 { throw CocoaError(.fileReadUnknown) }
     }
 }
 
