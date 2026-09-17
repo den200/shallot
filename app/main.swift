@@ -16,6 +16,7 @@ final class AppDelegate: NSObject, NSApplicationDelegate, NSMenuDelegate {
     private let toggleItem = NSMenuItem(title: "", action: #selector(toggle), keyEquivalent: "")
     private let portItem = NSMenuItem(title: "", action: #selector(changePort), keyEquivalent: "")
     private let copyItem = NSMenuItem(title: "", action: #selector(copyAddress), keyEquivalent: "")
+    private let connectItem = NSMenuItem(title: "Connect on Launch", action: #selector(toggleConnectOnLaunch), keyEquivalent: "")
     private let loginItem = NSMenuItem(title: "Launch at Login", action: #selector(toggleLogin), keyEquivalent: "")
     private let aboutItem = NSMenuItem(title: "About Shallot", action: #selector(showAbout), keyEquivalent: "")
     private let updateItem = NSMenuItem(title: "Check for Updates…", action: #selector(checkForUpdates), keyEquivalent: "")
@@ -36,13 +37,15 @@ final class AppDelegate: NSObject, NSApplicationDelegate, NSMenuDelegate {
         let menu = NSMenu()
         menu.delegate = self
         menu.items = [statusLine, toggleItem, .separator(), portItem, copyItem,
-                      .separator(), loginItem, .separator(), aboutItem, updateItem,
+                      .separator(), connectItem, loginItem, .separator(), aboutItem, updateItem,
                       .separator(), quitItem]
-        for item in [toggleItem, portItem, copyItem, loginItem, aboutItem, updateItem] { item.target = self }
+        for item in [toggleItem, portItem, copyItem, connectItem, loginItem, aboutItem, updateItem] {
+            item.target = self
+        }
         statusItem.menu = menu
 
         render()
-        if defaults.bool(forKey: "on") { start() }
+        if defaults.bool(forKey: "connectOnLaunch") { start() }
     }
 
     func applicationWillTerminate(_ notification: Notification) {
@@ -138,11 +141,11 @@ final class AppDelegate: NSObject, NSApplicationDelegate, NSMenuDelegate {
         toggleItem.title = child == nil ? "Turn On" : "Turn Off"
         portItem.title = "Port: \(port)…"
         copyItem.title = "Copy 127.0.0.1:\(port)"
+        connectItem.state = defaults.bool(forKey: "connectOnLaunch") ? .on : .off
         loginItem.state = SMAppService.mainApp.status == .enabled ? .on : .off
     }
 
     @objc private func toggle() {
-        defaults.set(child == nil, forKey: "on")
         if child == nil { start() } else { stop() }
     }
 
@@ -178,6 +181,10 @@ final class AppDelegate: NSObject, NSApplicationDelegate, NSMenuDelegate {
     @objc private func copyAddress() {
         NSPasteboard.general.clearContents()
         NSPasteboard.general.setString("127.0.0.1:\(port)", forType: .string)
+    }
+
+    @objc private func toggleConnectOnLaunch() {
+        defaults.set(!defaults.bool(forKey: "connectOnLaunch"), forKey: "connectOnLaunch")
     }
 
     @objc private func toggleLogin() {
